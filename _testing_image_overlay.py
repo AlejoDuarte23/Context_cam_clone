@@ -9,8 +9,10 @@ from PIL import Image, ImageDraw, ImageFont
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 import pandas as pd
+from PIL import Image, ExifTags
+import piexif
 
-
+import piexif
 
 # %% Functions
 def calculate_initial_compass_bearing(lat1, lon1, lat2, lon2):
@@ -31,8 +33,33 @@ def calculate_initial_compass_bearing(lat1, lon1, lat2, lon2):
     bearing = math.degrees(bearing)
     bearing = (bearing + 180) % 360 - 180
 
-    return int(bearing)
+    return 129#int(bearing)
 
+
+def save_image_with_metadata(image_path, metadata):
+    # Open the image
+    img = Image.open(image_path)
+
+    # Load the existing EXIF data
+    exif_dict = piexif.load(img.info.get('exif', b''))
+
+    # Assign GPS information (make sure to follow EXIF format for GPS data)
+    gps_ifd = {
+        piexif.GPSIFD.GPSVersionID: (2, 0, 0, 0),
+        piexif.GPSIFD.GPSLatitudeRef: metadata['GPSLatitudeRef'],
+        piexif.GPSIFD.GPSLatitude: metadata['GPSLatitude'],
+        piexif.GPSIFD.GPSLongitudeRef: metadata['GPSLongitudeRef'],
+        piexif.GPSIFD.GPSLongitude: metadata['GPSLongitude']
+    }
+
+    exif_dict['GPS'] = gps_ifd
+
+    # Convert the updated EXIF data back to bytes
+    exif_bytes = piexif.dump(exif_dict)
+
+    # Save the image with the updated EXIF data
+    img.save(image_path, "jpeg", exif=exif_bytes)
+    img.close()
 
 
 def get_decimal_from_dms(dms):
@@ -40,7 +67,7 @@ def get_decimal_from_dms(dms):
     degrees = dms[0] 
     minutes = dms[1] / 60.0
     seconds = dms[2] / 3600.0
-    return degrees+minutes+seconds
+    return round(degrees+minutes+seconds,5)
 
 def get_comments_info(image_path:str) -> Tuple:
     with Image.open(image_path) as img:
@@ -65,7 +92,7 @@ def create_standardized_overlay_image(image_path: str, cord1: str, cord2: str, d
     with Image.open(image_path) as img:
         base_width, base_height = img.size
     
-    text_size = int(base_height * 0.03)
+    text_size = int(base_height * 0.027)
     
     box_height = base_height // 8
     
@@ -122,6 +149,32 @@ def create_standardized_overlay_image(image_path: str, cord1: str, cord2: str, d
     
     return combined_image_path
 
+
+def copy_and_rotate(image_path: str, rotation_angle: int):
+    # Open the image
+    image = Image.open(image_path)
+
+    # Check if the image has EXIF data
+    exif_data = None
+    if "exif" in image.info:
+        exif_data = image.info['exif']
+
+    # Rotate the image
+    rotated_image = image.rotate(rotation_angle, expand=True)
+
+    # Create a new filename for the rotated image
+    new_filename = f"{image_path.rsplit('.', 1)[0]}_rotated.{image_path.rsplit('.', 1)[-1]}"
+
+    # Save the rotated image with the original EXIF data (if present)
+    rotated_image.save(new_filename, "JPEG", exif=exif_data)
+
+    # Close the image files
+    image.close()
+    rotated_image.close()
+
+    return new_filename
+
+
 # %% engine
 
 if __name__ =='__main__':
@@ -144,3 +197,4 @@ if __name__ =='__main__':
 
 
 
+    
